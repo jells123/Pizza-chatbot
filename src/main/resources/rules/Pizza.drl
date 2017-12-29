@@ -5,7 +5,9 @@ import pl.poznan.put.cs.si.puttalky.Zamowienie;
 import pl.poznan.put.cs.si.puttalky.Ciasto;
 import pl.poznan.put.cs.si.puttalky.Dodatek;
 import pl.poznan.put.cs.si.puttalky.BazaWiedzy;
+
 import java.util.Set;
+import java.util.HashSet;
 
 
 /** Author: agalawrynowicz<br>
@@ -24,25 +26,75 @@ rule "start"
 		insert(new Fakt("start", "0"));
 end
 
+rule "Podano nazwe pizzy"
+    salience 2
+
+    when
+        f : Fakt(nazwa == "nazwano_pizze")
+        baza : BazaWiedzy()
+        eval( baza.jestNazwanaPizza(f.getWartosc()) )
+    then
+        insert(new Fakt("pizza_propozycja", f.getWartosc()));
+        System.out.println("Dobrze, zamawiam konkretna pizze: " + f.getWartosc());
+end
+
+rule "Podano typ pizzy"
+    salience 2
+
+    when
+        f : Fakt(nazwa == "nazwano_pizze")
+        baza : BazaWiedzy()
+        eval( baza.jestTypemPizzy(f.getWartosc()) )
+    then
+        insert(new Fakt("typ_pizzy", f.getWartosc()));
+end
+
+rule "Brak dodatku"
+    salience 2
+    when
+    	f : Fakt(nazwa == "dodatek", getWartosci().size() == 0)
+    	not Fakt(nazwa == "nazwano_pizze")
+        dodatek : Dodatek(getMonit() == "Jaki dodatek powinna zawierać Twoja pizza?:\n", znalezionoDodatek() == false)
+        parser : Parser()
+    then
+        System.out.println("Ojojoj, wygląda na to, że nie mamy dodatku " + parser.getSlowaKluczowe()[0] + "... :c");
+        f.setWartosc(parser.getSlowaKluczowe()[0]);
+        update(f);
+end
+
 rule "Podaj dodatki"
 	salience 2
 	
 	when
 		not Fakt(nazwa == "dodatek")
-		dodatek : Dodatek()
+		not Fakt(nazwa == "nazwano_pizze")
+		dodatek : Dodatek(znalezionoDodatek() == false)
 		parser : Parser()
 		baza : BazaWiedzy()
 	then
-		  dodatek.setMonit("Jaki dodatek powinna zawierać Twoja pizza?:\n");
-		  dodatek.zadajPytanie();
-		  parser.przetworzOdpowiedz();
-		 
-		for (String slowo : parser.getSlowaKluczowe()){
-			for (String uriKlasy : baza.dopasujDodatek(slowo)) { 
+        dodatek.setMonit("Jaki dodatek powinna zawierać Twoja pizza?:\n");
+        dodatek.zadajPytanie();
+        parser.przetworzOdpowiedz();
+
+        dodatek.setZnaleziono(false);
+        Set<String> znalezioneDodatki = new HashSet<String>();
+		for (String slowo : parser.getSlowaKluczowe()) {
+		    for (String uriKlasy : baza.dopasujDodatek(slowo)) {
+                znalezioneDodatki.add(uriKlasy);
+                dodatek.setZnaleziono(true);
+            }
+
+			/*for (String uriKlasy : baza.dopasujDodatek(slowo)) {
 		        insert(new Fakt("dodatek", uriKlasy));
-		    } 
+		        dodatek.setZnaleziono(true);
+		        System.out.println("dodatek " + uriKlasy);
+		    }*/
+
+            for (String uriKlasy : baza.dopasujPizze(slowo, parser)) {
+                insert(new Fakt("nazwano_pizze", uriKlasy));
+            }
 		}
-		    		
+		insert(new Fakt("dodatek", znalezioneDodatki));
 		//@TODO	brak dopasowania
 		update(dodatek);
 end
@@ -72,7 +124,31 @@ rule "Podaj rodzaj ciasta"
 		update(ciasto);
 end
 
-rule "Polecana pizza"
+rule "Polecana pizza wedlug typu"
+    salience 1
+
+    when
+        f : Fakt(nazwa == "typ_pizzy")
+        baza : BazaWiedzy()
+    then
+        System.out.println("Podano typ pizzy: " + f.getWartosc());
+        Set<String> pizze = baza.wyszukajPizzePoTypie(f.getWartosc());
+
+        if (pizze.size()>1){
+            for (String nazwaPizzy : pizze) {
+                insert(new Fakt("pizza_propozycja", nazwaPizzy));
+                if (!nazwaPizzy.equals("Nothing")){
+                   System.out.println("Polecam pizzę:"+nazwaPizzy);
+                }
+            }
+        }
+        else {
+            System.out.println("Wyglada na to, ze nie ma pizzy takiego typu. (???)");
+        }
+
+end
+
+rule "Polecana pizza wedlug dodatkow"
 	salience 1
 	
 	when
@@ -85,19 +161,19 @@ rule "Polecana pizza"
 		pizza: Pizza()
 	then
 
-		Set<String> pizze = baza.wyszukajPizzePoDodatkach($dodatek.getWartosc());
+    	Set<String> pizze = baza.wyszukajPizzePoWieluDodatkach($dodatek.getWartosci());
+		//Set<String> pizze = baza.wyszukajPizzePoDodatkach($dodatek.getWartosc());
             
         if (pizze.size()>1){            		
 			for (String nazwaPizzy : pizze) {
-				insert(new Fakt("pizza_propozycja", nazwaPizzy));
-		    	//System.out.println();
 		    	if (!nazwaPizzy.equals("Nothing")){
-		       	   System.out.println("Polecam pizzę:"+nazwaPizzy);
+  					insert(new Fakt("pizza_propozycja", nazwaPizzy));
+		       	    System.out.println("Polecam pizzę:"+nazwaPizzy);
 		       	}
 		    }
 		}
 		else {
-			System.out.println(pizza.getBrakDopasowania());
+			System.out.println("Dobrze, zrobimy pizzę specjalną z dodatkami: " + $dodatek.getWartosciString());
 	    }
 
 end
