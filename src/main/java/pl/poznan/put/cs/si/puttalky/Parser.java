@@ -77,7 +77,6 @@ public class Parser {
 		return false;
 	}
 
-	
 	public String[] parsuj (String wypowiedz) {
 		String[] slowa = wypowiedz.split(" ");
 		ArrayList<String> tokeny = new ArrayList<String>();
@@ -88,25 +87,25 @@ public class Parser {
 		for (String slowo : slowa) {
 
 			String token = new String("");
-			String fat = new String("grube");
 
 			if (stem(s, slowo).length>1)
 				token = stem(s, slowo)[0];
 			else
 				token = slowo.toLowerCase();
 
-			if (slowo.equals(fat))
+			if (slowo.equals("grube"))
 				token = new String("gruby");
+
+			if (slowo.equals("szynki"))
+			    token = new String("szynka");
 
 			if (slowo.equals("bez"))
 				bezFound = true;
 
 			if (jestDoPominiecia(token))
 				continue;
-
 			if (bezFound)
 				token = "-" + token;
-
 			tokeny.add(token);
 
 		}

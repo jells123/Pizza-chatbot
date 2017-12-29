@@ -158,8 +158,15 @@
     <owl:Class rdf:about="http://semantic.cs.put.poznan.pl/ontologie/pizza.owl#Mozzarella">
         <rdfs:subClassOf rdf:resource="http://semantic.cs.put.poznan.pl/ontologie/pizza.owl#DodatekSerowy"/>
         <owl:disjointWith rdf:resource="http://semantic.cs.put.poznan.pl/ontologie/pizza.owl#Parmesan"/>
+        <owl:disjointWith rdf:resource="http://semantic.cs.put.poznan.pl/ontologie/pizza.owl#Ser"/>
     </owl:Class>
-    
+
+    <!-- http://semantic.cs.put.poznan.pl/ontologie/pizza.owl#Ser -->
+
+    <owl:Class rdf:about="http://semantic.cs.put.poznan.pl/ontologie/pizza.owl#Ser">
+        <rdfs:subClassOf rdf:resource="http://semantic.cs.put.poznan.pl/ontologie/pizza.owl#DodatekSerowy"/>
+        <owl:disjointWith rdf:resource="http://semantic.cs.put.poznan.pl/ontologie/pizza.owl#Mozzarella"/>
+    </owl:Class>
 
 
     <!-- http://semantic.cs.put.poznan.pl/ontologie/pizza.owl#NazwanaPizza -->

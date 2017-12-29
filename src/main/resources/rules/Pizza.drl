@@ -49,16 +49,33 @@ rule "Podano typ pizzy"
         insert(new Fakt("typ_pizzy", f.getWartosc()));
 end
 
+rule "Podano zakazany typ pizzy"
+    salience 2
+
+    when
+        f : Fakt(nazwa == "zakazano_pizze")
+        baza : BazaWiedzy()
+        eval( baza.jestTypemPizzy(f.getWartosc().substring(1)))
+    then
+        insert(new Fakt("zakazany_typ_pizzy", f.getWartosc()));
+end
+
 rule "Brak dodatku"
     salience 2
     when
     	f : Fakt(nazwa == "dodatek", getWartosci().size() == 0)
+    	Fakt(nazwa == "zakazany_dodatek", getWartosci().size() == 0) // nie zakazano zadnego dodatku
+
     	not Fakt(nazwa == "nazwano_pizze")
+    	not Fakt(nazwa == "typ_pizzy")
+
+    	not Fakt(nazwa == "zakazano_pizze")
+
         dodatek : Dodatek(getMonit() == "Jaki dodatek powinna zawierać Twoja pizza?:\n", znalezionoDodatek() == false)
         parser : Parser()
     then
-        System.out.println("Ojojoj, wygląda na to, że nie mamy dodatku " + parser.getSlowaKluczowe()[0] + "... :c");
-        f.setWartosc(parser.getSlowaKluczowe()[0]);
+        System.out.println("Ojojoj, wygląda na to, że nie mamy dodatku " + String.join(" ", parser.getSlowaKluczowe()) + "... :c");
+        f.setWartosc(String.join(" ", parser.getSlowaKluczowe()));
         update(f);
 end
 
@@ -77,24 +94,30 @@ rule "Podaj dodatki"
         parser.przetworzOdpowiedz();
 
         dodatek.setZnaleziono(false);
+
         Set<String> znalezioneDodatki = new HashSet<String>();
+		Set<String> zakazaneDodatki = new HashSet<String>();
+
 		for (String slowo : parser.getSlowaKluczowe()) {
 		    for (String uriKlasy : baza.dopasujDodatek(slowo)) {
                 znalezioneDodatki.add(uriKlasy);
                 dodatek.setZnaleziono(true);
             }
+            for (String uriKlasy : baza.dopasujZakazanyDodatek(slowo)) {
+                zakazaneDodatki.add(uriKlasy);
+            }
 
-			/*for (String uriKlasy : baza.dopasujDodatek(slowo)) {
-		        insert(new Fakt("dodatek", uriKlasy));
-		        dodatek.setZnaleziono(true);
-		        System.out.println("dodatek " + uriKlasy);
-		    }*/
-
-            for (String uriKlasy : baza.dopasujPizze(slowo, parser)) {
+            for (String uriKlasy : baza.dopasujPizze(slowo)) {
                 insert(new Fakt("nazwano_pizze", uriKlasy));
             }
+
+            for (String uriKlasy : baza.dopasujZakazanaPizze(slowo)) {
+                insert(new Fakt("zakazano_pizze", uriKlasy));
+            }
+
 		}
 		insert(new Fakt("dodatek", znalezioneDodatki));
+		insert(new Fakt("zakazany_dodatek", zakazaneDodatki));
 		//@TODO	brak dopasowania
 		update(dodatek);
 end
@@ -144,6 +167,32 @@ rule "Polecana pizza wedlug typu"
         }
         else {
             System.out.println("Wyglada na to, ze nie ma pizzy takiego typu. (???)");
+            insert(new Fakt("pizza_propozycja", "... nie wiem o co Ci chodzi :/"));
+        }
+
+end
+
+rule "Polecana pizza wedlug zakazanego typu"
+    salience 1
+
+    when
+        f : Fakt(nazwa == "zakazany_typ_pizzy")
+        baza : BazaWiedzy()
+    then
+        System.out.println("[BEZ] Podano typ pizzy: " + f.getWartosc());
+        Set<String> pizze = baza.wyszukajPizzePoZakazanymTypie(f.getWartosc());
+
+        if (pizze.size()>=1){
+            for (String nazwaPizzy : pizze) {
+                insert(new Fakt("pizza_propozycja", nazwaPizzy));
+                if (!nazwaPizzy.equals("Nothing")){
+                   System.out.println("[BEZ] Polecam pizzę:"+nazwaPizzy);
+                }
+            }
+        }
+        else {
+            System.out.println("[BEZ] Wyglada na to, ze nie ma pizzy takiego typu. (???)");
+            insert(new Fakt("pizza_propozycja", "... nie wiem o co Ci chodzi :/"));
         }
 
 end
@@ -155,15 +204,15 @@ rule "Polecana pizza wedlug dodatkow"
 		Fakt(nazwa == "dodatek") && 
 		Fakt(nazwa == "rodzaj_ciasta") && 	
 		not Fakt(nazwa == "pizza_propozycja") &&
-        $dodatek : Fakt( nazwa == "dodatek")
+        $dodatek : Fakt( nazwa == "dodatek") &&
+        zakazany_dodatek : Fakt(nazwa == "zakazany_dodatek")
  		
 		baza: BazaWiedzy()
 		pizza: Pizza()
 	then
 
-    	Set<String> pizze = baza.wyszukajPizzePoWieluDodatkach($dodatek.getWartosci());
-		//Set<String> pizze = baza.wyszukajPizzePoDodatkach($dodatek.getWartosc());
-            
+    	Set<String> pizze = baza.wyszukajPizzePoWieluDodatkach($dodatek.getWartosci(), zakazany_dodatek.getWartosci());
+
         if (pizze.size()>1){            		
 			for (String nazwaPizzy : pizze) {
 		    	if (!nazwaPizzy.equals("Nothing")){
