@@ -90,7 +90,7 @@ rule "Podaj dodatki"
 		        System.out.println("dodatek " + uriKlasy);
 		    }*/
 
-            for (String uriKlasy : baza.dopasujPizze(slowo, parser)) {
+            for (String uriKlasy : baza.dopasujPizze(slowo)) {
                 insert(new Fakt("nazwano_pizze", uriKlasy));
             }
 		}
