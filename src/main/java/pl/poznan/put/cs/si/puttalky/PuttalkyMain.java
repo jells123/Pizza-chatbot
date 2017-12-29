@@ -27,7 +27,7 @@ public class PuttalkyMain {
 
             Parser parser = new Parser();
             BazaWiedzy baza = new BazaWiedzy(); 
-            baza.inicjalizuj();
+            baza.inicjalizuj(parser);
 
             /*
 

@@ -27,7 +27,8 @@ public class BazaWiedzy {
     private OWLOntologyManager manager = null;
     private OWLOntology ontologia;
 
-    private Set<OWLClass> listaKlas;
+    //private Set<OWLClass> listaKlas;
+    private Map<OWLClass, String[]> listaKlas;
     private Set<OWLClass> listaDodatkow;
 
     private Set<OWLClass> listaPizzow;
@@ -37,14 +38,19 @@ public class BazaWiedzy {
 
 	OWLReasoner silnik;
     
-    public void inicjalizuj() {
+    public void inicjalizuj(Parser p) {
 		InputStream plik = this.getClass().getResourceAsStream("/pizza.owl");
 		manager = OWLManager.createOWLOntologyManager();
 		
 		try {
 			ontologia = manager.loadOntologyFromOntologyDocument(plik);
 			silnik = new Reasoner.ReasonerFactory().createReasoner(ontologia);
-			listaKlas = ontologia.getClassesInSignature();
+
+			listaKlas = new HashMap<OWLClass, String[]>();
+			for (OWLClass l : ontologia.getClassesInSignature()) {
+			    listaKlas.put(l, getSlowaKluczoweKlasy(l, p));
+            }
+
 			listaDodatkow = new HashSet<OWLClass>();
 			listaPizzow = new HashSet<OWLClass>();
 
@@ -53,6 +59,9 @@ public class BazaWiedzy {
 
             OWLClass dodatek  = manager.getOWLDataFactory().getOWLClass(IRI.create("http://semantic.cs.put.poznan.pl/ontologie/pizza.owl#Dodatek"));
 			for (org.semanticweb.owlapi.reasoner.Node<OWLClass> klasa: silnik.getSubClasses(dodatek, false)) {
+                if (klasa.getRepresentativeElement().toString().equals("owl:Nothing")) {
+                    continue;
+                }
 				listaDodatkow.add(klasa.getRepresentativeElement());
 			}
 			OWLClass pizza  = manager.getOWLDataFactory().getOWLClass(IRI.create("http://semantic.cs.put.poznan.pl/ontologie/pizza.owl#Pizza"));
@@ -73,6 +82,7 @@ public class BazaWiedzy {
                 else {
                     listaTypowPizzow.add(temp.getIRI().getFragment());
                 }
+
             }
 			
 		} catch (OWLOntologyCreationException e) {
@@ -82,16 +92,12 @@ public class BazaWiedzy {
 		
     }
 
-	public Set<String> dopasujPizze(String s, Parser p){ //meh ten parser... ??? jak to zrobić mądrzej
+	public Set<String> dopasujPizze(String s){ //meh ten parser... ??? jak to zrobić mądrzej
 		Set<String> result = new HashSet<String>();
 		if (s.equals("pizza"))
 			return result;
-
 		for (OWLClass klasa : listaPizzow){
-
-			int hashIdx = klasa.toString().indexOf('#');
-			String pizzaPartWords = String.join(" ", klasa.toString().substring(hashIdx + 1, klasa.toString().length() - 1).split("(?=\\p{Upper})"));
-			String[] pizzaParsed = p.parsuj(pizzaPartWords.toLowerCase());
+			String[] pizzaParsed = listaKlas.get(klasa);
             if (String.join("", pizzaParsed).toLowerCase().contains(s.toLowerCase()) && s.length()>2){
                 result.add(klasa.getIRI().getFragment());
             }
@@ -117,22 +123,45 @@ public class BazaWiedzy {
         }
         return false;
     }
+
+    public String[] getSlowaKluczoweKlasy(OWLClass klasa, Parser p) {
+        int hashIdx = klasa.toString().indexOf('#');
+        String classPartWords = String.join(" ", klasa.toString().substring(hashIdx + 1, klasa.toString().length() - 1).split("(?=\\p{Upper})"));
+        String[] classParsed = p.parsuj(classPartWords.toLowerCase());
+
+        return classParsed;
+    }
+
+    public Set<String> dopasujZakazanyDodatek(String s) {
+        Set<String> result = new HashSet<String>();
+        if (s.indexOf('-') == 0) {
+            return dopasujDodatek(s.substring(1));
+        }
+        return result;
+    }
+
+    public Set<String> dopasujZakazanaPizze(String s) {
+        Set<String> result = new HashSet<String>();
+        if (s.indexOf('-') == 0) {
+            return dopasujPizze(s.substring(1));
+        }
+        return result;
+    }
     
     public Set<String> dopasujDodatek(String s){
     	Set<String> result = new HashSet<String>();
     	if (s.equals("pizza"))
     	    return result;
     	for (OWLClass klasa : listaDodatkow){
-    		if (klasa.toString().toLowerCase().contains(s.toLowerCase()) && s.length()>2){
-    			result.add(klasa.getIRI().getFragment().toString());
-    			/*
-    			problemy:
-    			pizza z sosem pomidorowym = znajduje sos, sos pomidorowy i pikantny sos pomidorowy,
-    			potrzeba sos pomidorowy - bo to najlepiej pasuje i jest najogólniejsze!
-    			pizza z pomidorem = masakra, sosy pomidorowe znajduje wszystkie i pomidora...
-    			LOL WALIĆ TAKIE SKOMPLIKOWANE RZECZY.
-    			 */
-    		}
+    	    String[] dodatekParsed = listaKlas.get(klasa);
+    	    for (String d : dodatekParsed) {
+                if (d.equals(s)) { // po obu stronach sparsowane?
+                    result.add(klasa.getIRI().getFragment().toString());
+                }
+            }
+    		/*if (klasa.toString().toLowerCase().contains(s.toLowerCase()) && s.length()>2){
+                result.add(klasa.getIRI().getFragment().toString());
+    		}*/
     	}
     	return result;
     }
@@ -144,24 +173,6 @@ public class BazaWiedzy {
             pizze.add(klasa.getEntities().iterator().next().asOWLClass().getIRI().getFragment());
         }
         return pizze;
-    }
-    
-    public Set<String> wyszukajPizzePoDodatkach(String iri){
-    	Set<String> pizze = new HashSet<String>();
-    	OWLObjectProperty maDodatek = manager.getOWLDataFactory().getOWLObjectProperty(IRI.create("http://semantic.cs.put.poznan.pl/ontologie/pizza.owl#maDodatek"));
-    	Set<OWLClassExpression> ograniczeniaEgzystencjalne = new HashSet<OWLClassExpression>();
-    	
-    	OWLClass dodatek = manager.getOWLDataFactory().getOWLClass(IRI.create("http://semantic.cs.put.poznan.pl/ontologie/pizza.owl#" + iri));
-    	OWLClassExpression wyrazenie = manager.getOWLDataFactory().getOWLObjectSomeValuesFrom(maDodatek, dodatek);
-    	ograniczeniaEgzystencjalne.add(wyrazenie);
-  	
-    	OWLClassExpression pozadanaPizza = manager.getOWLDataFactory().getOWLObjectIntersectionOf(ograniczeniaEgzystencjalne);
-    	
-		for (org.semanticweb.owlapi.reasoner.Node<OWLClass> klasa: silnik.getSubClasses(pozadanaPizza, false)) {
-			pizze.add(klasa.getEntities().iterator().next().asOWLClass().getIRI().getFragment());
-		}
-	
-		return pizze;
     }
 
     public Set<String> wyszukajPizzePoWieluDodatkach(Set<String> dodatki){
@@ -185,7 +196,7 @@ public class BazaWiedzy {
 	
 	public static void main(String[] args) {
 		BazaWiedzy baza = new BazaWiedzy();
-		baza.inicjalizuj();
+		//baza.inicjalizuj();
 		
 		OWLClass mieso = baza.manager.getOWLDataFactory().getOWLClass(IRI.create("http://semantic.cs.put.poznan.pl/ontologie/pizza.owl#DodatekMięsny"));
 		for (org.semanticweb.owlapi.reasoner.Node<OWLClass> klasa: baza.silnik.getSubClasses(mieso, true)) {
